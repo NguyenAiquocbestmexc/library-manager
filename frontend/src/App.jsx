@@ -42,7 +42,7 @@ export default function App() {
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('lib_dark_mode');
     if (saved !== null) return saved === 'true';
-    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    return false; // Mặc định giao diện Sáng, người dùng bấm nút Mặt trăng / Mặt trời để chuyển đổi
   });
 
   useEffect(() => {
