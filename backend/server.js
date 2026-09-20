@@ -7,6 +7,8 @@ const fs = require('fs');
 const booksRouter = require('./routes/books');
 const statsRouter = require('./routes/stats');
 const borrowsRouter = require('./routes/borrows');
+const membersRouter = require('./routes/members');
+const reportsRouter = require('./routes/reports');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -30,6 +32,8 @@ app.get('/api/health', (req, res) => {
 app.use('/api/books', booksRouter);
 app.use('/api/stats', statsRouter);
 app.use('/api/borrows', borrowsRouter);
+app.use('/api/members', membersRouter);
+app.use('/api/reports', reportsRouter);
 
 // Phục vụ frontend nếu đã build (tiện cho việc deploy trọn gói 1 dịch vụ)
 const distPath = path.join(__dirname, '..', 'frontend', 'dist');

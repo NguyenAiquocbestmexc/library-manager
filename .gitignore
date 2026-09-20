@@ -9,6 +9,7 @@ frontend/dist/
 backend/library.db
 backend/library.db-wal
 backend/library.db-shm
+backend/library_data.json
 
 # Environment & logs
 .env

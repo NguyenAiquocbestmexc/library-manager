@@ -120,3 +120,72 @@ export async function deleteBorrowTicket(id) {
   }
   return data;
 }
+
+// ==================== MEMBERS API ====================
+export async function fetchMembers(params = {}) {
+  const query = new URLSearchParams();
+  if (params.search) query.append('search', params.search);
+
+  const res = await fetch(`${API_BASE}/members?${query.toString()}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'Lỗi khi tải danh sách độc giả');
+  }
+  return res.json();
+}
+
+export async function createMember(memberData) {
+  const res = await fetch(`${API_BASE}/members`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(memberData)
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Lỗi khi tạo độc giả');
+  }
+  return data;
+}
+
+export async function updateMember(id, memberData) {
+  const res = await fetch(`${API_BASE}/members/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(memberData)
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Lỗi khi cập nhật độc giả');
+  }
+  return data;
+}
+
+export async function deleteMember(id) {
+  const res = await fetch(`${API_BASE}/members/${id}`, {
+    method: 'DELETE'
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Lỗi khi xóa độc giả');
+  }
+  return data;
+}
+
+export async function fetchMemberHistory(id) {
+  const res = await fetch(`${API_BASE}/members/${id}/history`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'Lỗi khi tải lịch sử độc giả');
+  }
+  return res.json();
+}
+
+// ==================== REPORTS & ANALYTICS API ====================
+export async function fetchAnalyticsReport() {
+  const res = await fetch(`${API_BASE}/reports/analytics`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'Lỗi khi tải báo cáo phân tích');
+  }
+  return res.json();
+}

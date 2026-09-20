@@ -129,6 +129,64 @@ const formatDate = (d) => d.toISOString().split('T')[0];
 const subDays = (d, n) => new Date(d.getTime() - n * 86400000);
 const addDays = (d, n) => new Date(d.getTime() + n * 86400000);
 
+const initialSampleMembers = [
+  {
+    id: 1,
+    name: 'Nguyễn Văn An',
+    phone: '0912345678',
+    email: 'nguyenvanan@gmail.com',
+    card_id: 'SV2024-001',
+    department: 'Khoa Công Nghệ Thông Tin',
+    joined_date: '2024-01-15',
+    status: 'ACTIVE',
+    notes: 'Bạn đọc năng nổ, thường xuyên mượn sách chuyên ngành'
+  },
+  {
+    id: 2,
+    name: 'Trần Thị Mai',
+    phone: '0987654321',
+    email: 'maitt@gmail.com',
+    card_id: 'SV2024-045',
+    department: 'Khoa Kinh Tế & Quản Trị',
+    joined_date: '2024-02-10',
+    status: 'ACTIVE',
+    notes: 'Đang có sách mượn quá hạn cần thu hồi'
+  },
+  {
+    id: 3,
+    name: 'Lê Quốc Huy',
+    phone: '0903123456',
+    email: 'huylq@gmail.com',
+    card_id: 'SV2024-089',
+    department: 'Bạn đọc tự do',
+    joined_date: '2024-03-01',
+    status: 'ACTIVE',
+    notes: 'Luôn trả sách đúng hạn, bảo quản sách tốt'
+  },
+  {
+    id: 4,
+    name: 'Phạm Minh Tuấn',
+    phone: '0934567890',
+    email: 'tuanpm@gmail.com',
+    card_id: 'SV2024-112',
+    department: 'Khoa Ngoại Ngữ',
+    joined_date: '2024-04-18',
+    status: 'ACTIVE',
+    notes: 'Thích sách văn học cổ điển'
+  },
+  {
+    id: 5,
+    name: 'Đặng Thu Hà',
+    phone: '0978112233',
+    email: 'hadt@gmail.com',
+    card_id: 'SV2024-156',
+    department: 'Khoa Sư Phạm',
+    joined_date: '2024-05-20',
+    status: 'ACTIVE',
+    notes: 'Hội viên câu lạc bộ sách'
+  }
+];
+
 const initialSampleBorrows = [
   {
     id: 1,
@@ -151,7 +209,7 @@ const initialSampleBorrows = [
     borrower_phone: '0987654321',
     borrower_card_id: 'SV2024-045',
     borrow_date: formatDate(subDays(now, 20)),
-    due_date: formatDate(subDays(now, 6)), // Quá hạn 6 ngày
+    due_date: formatDate(subDays(now, 6)),
     return_date: null,
     status: 'BORROWED',
     notes: 'Đã gửi SMS nhắc hạn trả sách lần 1'
@@ -219,6 +277,23 @@ try {
       );
     `);
 
+    // Tạo bảng members
+    sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS members (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        email TEXT,
+        card_id TEXT UNIQUE NOT NULL,
+        department TEXT,
+        joined_date TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'ACTIVE',
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
     // Seed books nếu trống
     const countRow = sqlite.prepare('SELECT COUNT(*) as count FROM books').get();
     if (!countRow || countRow.count === 0) {
@@ -247,6 +322,20 @@ try {
       sqlite.exec('COMMIT');
     }
 
+    // Seed members nếu trống
+    const countMember = sqlite.prepare('SELECT COUNT(*) as count FROM members').get();
+    if (!countMember || countMember.count === 0) {
+      const insertM = sqlite.prepare(`
+        INSERT INTO members (name, phone, email, card_id, department, joined_date, status, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      sqlite.exec('BEGIN');
+      for (const m of initialSampleMembers) {
+        insertM.run(m.name, m.phone, m.email, m.card_id, m.department, m.joined_date, m.status, m.notes);
+      }
+      sqlite.exec('COMMIT');
+    }
+
     db = sqlite;
     console.log('✅ Cơ sở dữ liệu: node:sqlite (Native Node.js)');
   }
@@ -259,18 +348,17 @@ if (!db) {
   console.log('✅ Cơ sở dữ liệu: Pure JSON File Database (Universal Safe Storage)');
   const jsonFilePath = path.resolve(__dirname, 'library-data.json');
 
-  let memoryData = { books: [], borrow_records: [] };
+  let memoryData = { books: [], borrow_records: [], members: [] };
   if (fs.existsSync(jsonFilePath)) {
     try {
       memoryData = JSON.parse(fs.readFileSync(jsonFilePath, 'utf-8'));
-      if (!memoryData.borrow_records) {
-        memoryData.borrow_records = [...initialSampleBorrows];
-      }
+      if (!memoryData.borrow_records) memoryData.borrow_records = [...initialSampleBorrows];
+      if (!memoryData.members) memoryData.members = [...initialSampleMembers];
     } catch (err) {
-      memoryData = { books: [...initialSampleBooks], borrow_records: [...initialSampleBorrows] };
+      memoryData = { books: [...initialSampleBooks], borrow_records: [...initialSampleBorrows], members: [...initialSampleMembers] };
     }
   } else {
-    memoryData = { books: [...initialSampleBooks], borrow_records: [...initialSampleBorrows] };
+    memoryData = { books: [...initialSampleBooks], borrow_records: [...initialSampleBorrows], members: [...initialSampleMembers] };
     fs.writeFileSync(jsonFilePath, JSON.stringify(memoryData, null, 2), 'utf-8');
   }
 
@@ -288,6 +376,22 @@ if (!db) {
       return {
         get(...params) {
           const s = sql.toLowerCase();
+
+          // Members queries
+          if (s.includes('from members')) {
+            if (s.includes('where id = ?')) {
+              const id = Number(params[0]);
+              return memoryData.members.find(m => m.id === id) || null;
+            }
+            if (s.includes('where card_id = ?')) {
+              const cid = String(params[0]).trim();
+              return memoryData.members.find(m => m.card_id === cid) || null;
+            }
+            if (s.includes('count(*) as count')) {
+              return { count: memoryData.members.length };
+            }
+          }
+
           // Borrow records queries
           if (s.includes('from borrow_records')) {
             if (s.includes('where id = ?')) {
@@ -328,10 +432,31 @@ if (!db) {
         all(...params) {
           const s = sql.toLowerCase();
 
+          // Query members
+          if (s.includes('from members')) {
+            let membersList = [...memoryData.members];
+            if (sql.includes('name LIKE ?')) {
+              const term = String(params[0] || '').replace(/%/g, '').toLowerCase();
+              membersList = membersList.filter(m =>
+                m.name.toLowerCase().includes(term) ||
+                m.phone.toLowerCase().includes(term) ||
+                m.card_id.toLowerCase().includes(term) ||
+                (m.department && m.department.toLowerCase().includes(term))
+              );
+            }
+            return membersList.sort((a, b) => (b.id || 0) - (a.id || 0));
+          }
+
           // Query borrow_records
           if (s.includes('from borrow_records')) {
             let records = [...memoryData.borrow_records];
             let pIdx = 0;
+
+            if (sql.includes('borrower_card_id = ?')) {
+              const cid = String(params[pIdx]);
+              pIdx += 1;
+              records = records.filter(r => r.borrower_card_id === cid);
+            }
 
             if (sql.includes('borrower_name LIKE ?')) {
               const term = String(params[pIdx] || '').replace(/%/g, '').toLowerCase();
@@ -348,7 +473,6 @@ if (!db) {
               records = records.filter(r => r.status === st);
             }
 
-            // Sort by id DESC
             records.sort((a, b) => (b.id || 0) - (a.id || 0));
             return records;
           }
@@ -418,6 +542,52 @@ if (!db) {
         run(...params) {
           const s = sql.toLowerCase();
 
+          // Members CRUD
+          if (s.includes('insert into members')) {
+            const [name, phone, email, card_id, department, joined_date, status, notes] = params;
+            const nextId = memoryData.members.length > 0 ? Math.max(...memoryData.members.map(m => m.id || 0)) + 1 : 1;
+            const newMember = {
+              id: nextId,
+              name,
+              phone,
+              email: email || '',
+              card_id,
+              department: department || '',
+              joined_date: joined_date || new Date().toISOString().split('T')[0],
+              status: status || 'ACTIVE',
+              notes: notes || '',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            };
+            memoryData.members.push(newMember);
+            persist();
+            return { changes: 1, lastInsertRowid: nextId };
+          }
+
+          if (s.includes('update members') && s.includes('where id = ?')) {
+            const id = Number(params[params.length - 1]);
+            const m = memoryData.members.find(x => x.id === id);
+            if (m) {
+              m.name = params[0];
+              m.phone = params[1];
+              m.email = params[2];
+              m.card_id = params[3];
+              m.department = params[4];
+              m.status = params[5];
+              m.notes = params[6];
+              m.updated_at = new Date().toISOString();
+              persist();
+              return { changes: 1 };
+            }
+          }
+
+          if (s.includes('delete from members where id = ?')) {
+            const id = Number(params[0]);
+            memoryData.members = memoryData.members.filter(x => x.id !== id);
+            persist();
+            return { changes: 1 };
+          }
+
           // Insert borrow record
           if (s.includes('insert into borrow_records')) {
             const [book_id, book_title, borrower_name, borrower_phone, borrower_card_id, borrow_date, due_date, return_date, status, notes] = params;
@@ -442,7 +612,7 @@ if (!db) {
             return { changes: 1, lastInsertRowid: nextId };
           }
 
-          // Update borrow record (Return book)
+          // Update borrow record
           if (s.includes('update borrow_records')) {
             const id = Number(params[params.length - 1]);
             const record = memoryData.borrow_records.find(r => r.id === id);
@@ -492,11 +662,9 @@ if (!db) {
             const book = memoryData.books.find(b => b.id === id);
             if (book) {
               if (params.length === 3) {
-                // PATCH borrow or return: available_copies, status, id
                 book.available_copies = Number(params[0]);
                 book.status = params[1];
               } else {
-                // Full update
                 book.title = params[0];
                 book.author = params[1];
                 book.isbn = params[2];

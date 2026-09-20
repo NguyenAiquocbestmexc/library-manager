@@ -78,9 +78,17 @@ async function runTests() {
       const bookAfterReturn = await request({ hostname: 'localhost', port: 5003, path: `/api/books/${bookId}`, method: 'GET' });
       console.log('7. Kiểm tra sách được cộng trả lại 1 cuốn:', bookAfterReturn.data.data?.available_copies === 5 ? 'PASSED ✅' : 'FAILED ❌', `Còn: ${bookAfterReturn.data.data?.available_copies}/5`);
 
-      // 8. Cleanup test book
+      // 8. Test members API
+      const membersRes = await request({ hostname: 'localhost', port: 5003, path: '/api/members', method: 'GET' });
+      console.log('8. GET /api/members:', membersRes.status === 200 && membersRes.data.success ? 'PASSED ✅' : 'FAILED ❌', `Độc giả: ${membersRes.data.total}`);
+
+      // 9. Test reports analytics API
+      const reportsRes = await request({ hostname: 'localhost', port: 5003, path: '/api/reports/analytics', method: 'GET' });
+      console.log('9. GET /api/reports/analytics:', reportsRes.status === 200 && reportsRes.data.success ? 'PASSED ✅' : 'FAILED ❌', `Top sách: ${reportsRes.data.data?.topBorrowedBooks?.length}`);
+
+      // 10. Cleanup test book
       await request({ hostname: 'localhost', port: 5003, path: `/api/books/${bookId}`, method: 'DELETE' });
-      console.log('8. Dọn dẹp sách test: PASSED ✅');
+      console.log('10. Dọn dẹp sách test: PASSED ✅');
 
       console.log('--- TOÀN BỘ NGHIỆP VỤ MƯỢN TRẢ ĐÃ TEST THÀNH CÔNG RỰC RỠ! 🎉 ---');
       server.close(() => process.exit(0));
