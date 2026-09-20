@@ -20,7 +20,7 @@ Render.com cho phép tạo Web Service Node.js miễn phí có hỗ trợ HTTPS 
 3. Đẩy code lên GitHub:
    ```bash
    git branch -M main
-   git remote add origin https://github.com/<tai-khoan-cua-ban>/library-manager.git
+   git remote add origin https://github.com/NguyenAiquocbestmexc/library-manager.git
    git push -u origin main
    ```
 
