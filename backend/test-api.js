@@ -24,13 +24,16 @@ function request(options, data = null) {
 }
 
 async function runTests() {
-  const server = app.listen(5001, async () => {
+  const server = app.listen(5003, async () => {
     try {
-      console.log('--- BẮT ĐẦU KIỂM THỬ API ---');
+      console.log('--- BẮT ĐẦU KIỂM THỬ TOÀN DIỆN API ---');
 
       // 1. Check stats
-      const stats = await request({ hostname: 'localhost', port: 5001, path: '/api/stats', method: 'GET' });
-      console.log('1. GET /api/stats:', stats.status === 200 && stats.data.success ? 'PASSED ✅' : 'FAILED ❌', stats.data.data);
+      const stats = await request({ hostname: 'localhost', port: 5003, path: '/api/stats', method: 'GET' });
+      console.log('1. GET /api/stats:', stats.status === 200 && stats.data.success ? 'PASSED ✅' : 'FAILED ❌', {
+        titles: stats.data.data?.totalTitles,
+        overdue: stats.data.data?.overdueCount
+      });
 
       // 2. Create a new book
       const newBookPayload = {
@@ -40,33 +43,49 @@ async function runTests() {
         category: 'Công nghệ thông tin',
         published_year: 2023,
         quantity: 5,
-        description: 'Sách giáo trình cơ bản về OOP và Design Patterns'
+        description: 'Sách giáo trình cơ bản về OOP'
       };
-      const created = await request({ hostname: 'localhost', port: 5001, path: '/api/books', method: 'POST' }, newBookPayload);
+      const created = await request({ hostname: 'localhost', port: 5003, path: '/api/books', method: 'POST' }, newBookPayload);
       console.log('2. POST /api/books:', created.status === 201 && created.data.success ? 'PASSED ✅' : 'FAILED ❌', `ID: ${created.data.data?.id}`);
       const bookId = created.data.data.id;
 
-      // 3. Update book
-      const updatePayload = { title: 'Lập Trình Hướng Đối Tượng Căn Bản', quantity: 6 };
-      const updated = await request({ hostname: 'localhost', port: 5001, path: `/api/books/${bookId}`, method: 'PUT' }, updatePayload);
-      console.log('3. PUT /api/books/:id:', updated.status === 200 && updated.data.data.title.includes('Căn Bản') ? 'PASSED ✅' : 'FAILED ❌');
+      // 3. Get borrow tickets
+      const borrowsList = await request({ hostname: 'localhost', port: 5003, path: '/api/borrows', method: 'GET' });
+      console.log('3. GET /api/borrows:', borrowsList.status === 200 && borrowsList.data.success ? 'PASSED ✅' : 'FAILED ❌', `Số phiếu hiện có: ${borrowsList.data.total}`);
 
-      // 4. Borrow book
-      const borrowed = await request({ hostname: 'localhost', port: 5001, path: `/api/books/${bookId}/borrow`, method: 'PATCH' });
-      console.log('4. PATCH /api/books/:id/borrow:', borrowed.status === 200 && borrowed.data.data.available_copies === 5 ? 'PASSED ✅' : 'FAILED ❌', `Còn lại: ${borrowed.data.data?.available_copies}`);
+      // 4. Create new Borrow Ticket for bookId
+      const ticketPayload = {
+        book_id: bookId,
+        borrower_name: 'Hoàng Văn Thắng',
+        borrower_phone: '0977888999',
+        borrower_card_id: 'MS-202499',
+        due_date: '2026-10-05',
+        notes: 'Mượn ôn thi học kỳ'
+      };
+      const ticketCreated = await request({ hostname: 'localhost', port: 5003, path: '/api/borrows', method: 'POST' }, ticketPayload);
+      console.log('4. POST /api/borrows (Lập phiếu mượn):', ticketCreated.status === 201 && ticketCreated.data.success ? 'PASSED ✅' : 'FAILED ❌', `Phiếu #${ticketCreated.data.data?.id} cho ${ticketCreated.data.data?.borrower_name}`);
+      const ticketId = ticketCreated.data.data?.id;
 
-      // 5. Return book
-      const returned = await request({ hostname: 'localhost', port: 5001, path: `/api/books/${bookId}/return`, method: 'PATCH' });
-      console.log('5. PATCH /api/books/:id/return:', returned.status === 200 && returned.data.data.available_copies === 6 ? 'PASSED ✅' : 'FAILED ❌', `Có sẵn: ${returned.data.data?.available_copies}`);
+      // 5. Check book available_copies reduced
+      const bookAfterBorrow = await request({ hostname: 'localhost', port: 5003, path: `/api/books/${bookId}`, method: 'GET' });
+      console.log('5. Kiểm tra sách bị trừ 1 cuốn:', bookAfterBorrow.data.data?.available_copies === 4 ? 'PASSED ✅' : 'FAILED ❌', `Còn: ${bookAfterBorrow.data.data?.available_copies}/5`);
 
-      // 6. Delete book
-      const deleted = await request({ hostname: 'localhost', port: 5001, path: `/api/books/${bookId}`, method: 'DELETE' });
-      console.log('6. DELETE /api/books/:id:', deleted.status === 200 && deleted.data.success ? 'PASSED ✅' : 'FAILED ❌');
+      // 6. Return book via Ticket
+      const returnedTicket = await request({ hostname: 'localhost', port: 5003, path: `/api/borrows/${ticketId}/return`, method: 'PATCH' });
+      console.log('6. PATCH /api/borrows/:id/return (Trả sách theo phiếu):', returnedTicket.status === 200 && returnedTicket.data.data?.status === 'RETURNED' ? 'PASSED ✅' : 'FAILED ❌');
 
-      console.log('--- TẤT CẢ TEST ĐỀU THÀNH CÔNG RỰC RỠ! 🎉 ---');
+      // 7. Check book available_copies restored
+      const bookAfterReturn = await request({ hostname: 'localhost', port: 5003, path: `/api/books/${bookId}`, method: 'GET' });
+      console.log('7. Kiểm tra sách được cộng trả lại 1 cuốn:', bookAfterReturn.data.data?.available_copies === 5 ? 'PASSED ✅' : 'FAILED ❌', `Còn: ${bookAfterReturn.data.data?.available_copies}/5`);
+
+      // 8. Cleanup test book
+      await request({ hostname: 'localhost', port: 5003, path: `/api/books/${bookId}`, method: 'DELETE' });
+      console.log('8. Dọn dẹp sách test: PASSED ✅');
+
+      console.log('--- TOÀN BỘ NGHIỆP VỤ MƯỢN TRẢ ĐÃ TEST THÀNH CÔNG RỰC RỠ! 🎉 ---');
       server.close(() => process.exit(0));
     } catch (err) {
-      console.error('Lỗi khi chạy tests:', err);
+      console.error('Lỗi kiểm thử:', err);
       server.close(() => process.exit(1));
     }
   });

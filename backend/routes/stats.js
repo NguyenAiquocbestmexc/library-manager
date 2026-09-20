@@ -5,6 +5,7 @@ const db = require('../db');
 // GET /api/stats - Thống kê tổng quan thư viện
 router.get('/', (req, res) => {
   try {
+    const today = new Date().toISOString().split('T')[0];
     const totalTitles = db.prepare('SELECT COUNT(*) as count FROM books').get().count;
     
     const totals = db.prepare(`
@@ -23,6 +24,11 @@ router.get('/', (req, res) => {
       ORDER BY count DESC
     `).all();
 
+    // Thống kê phiếu mượn & quá hạn
+    const allBorrows = db.prepare('SELECT * FROM borrow_records').all();
+    const activeBorrows = allBorrows.filter(b => b.status === 'BORROWED');
+    const overdueCount = activeBorrows.filter(b => b.due_date < today).length;
+
     res.json({
       success: true,
       data: {
@@ -31,6 +37,8 @@ router.get('/', (req, res) => {
         availableCopies: totals.availableCopies,
         borrowedCopies: totals.borrowedCopies,
         outOfStockTitles: totals.outOfStockTitles,
+        activeBorrowsCount: activeBorrows.length,
+        overdueCount,
         categoryStats
       }
     });

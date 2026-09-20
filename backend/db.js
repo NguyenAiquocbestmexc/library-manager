@@ -124,9 +124,56 @@ const initialSampleBooks = [
   }
 ];
 
+const now = new Date();
+const formatDate = (d) => d.toISOString().split('T')[0];
+const subDays = (d, n) => new Date(d.getTime() - n * 86400000);
+const addDays = (d, n) => new Date(d.getTime() + n * 86400000);
+
+const initialSampleBorrows = [
+  {
+    id: 1,
+    book_id: 1,
+    book_title: 'Đắc Nhân Tâm',
+    borrower_name: 'Nguyễn Văn An',
+    borrower_phone: '0912345678',
+    borrower_card_id: 'SV2024-001',
+    borrow_date: formatDate(subDays(now, 3)),
+    due_date: formatDate(addDays(now, 11)),
+    return_date: null,
+    status: 'BORROWED',
+    notes: 'Sách mới nguyên vẹn, độc giả có cọc thẻ SV'
+  },
+  {
+    id: 2,
+    book_id: 2,
+    book_title: 'Clean Code: A Handbook of Agile Software Craftsmanship',
+    borrower_name: 'Trần Thị Mai',
+    borrower_phone: '0987654321',
+    borrower_card_id: 'SV2024-045',
+    borrow_date: formatDate(subDays(now, 20)),
+    due_date: formatDate(subDays(now, 6)), // Quá hạn 6 ngày
+    return_date: null,
+    status: 'BORROWED',
+    notes: 'Đã gửi SMS nhắc hạn trả sách lần 1'
+  },
+  {
+    id: 3,
+    book_id: 3,
+    book_title: 'Nhà Giả Kim',
+    borrower_name: 'Lê Quốc Huy',
+    borrower_phone: '0903123456',
+    borrower_card_id: 'SV2024-089',
+    borrow_date: formatDate(subDays(now, 14)),
+    due_date: formatDate(subDays(now, 2)),
+    return_date: formatDate(subDays(now, 1)),
+    status: 'RETURNED',
+    notes: 'Đã trả đủ sách, tình trạng tốt'
+  }
+];
+
 let db;
 
-// 1. Thử dùng module chuẩn node:sqlite (có sẵn trong Node 22.5+)
+// 1. Module chuẩn node:sqlite (Native Node.js 22.5+)
 try {
   const { DatabaseSync } = require('node:sqlite');
   if (DatabaseSync) {
@@ -134,7 +181,7 @@ try {
     const sqlite = new DatabaseSync(dbPath);
     sqlite.exec('PRAGMA journal_mode = WAL;');
     
-    // Tạo bảng
+    // Tạo bảng books
     sqlite.exec(`
       CREATE TABLE IF NOT EXISTS books (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -153,6 +200,26 @@ try {
       );
     `);
 
+    // Tạo bảng borrow_records
+    sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS borrow_records (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        book_id INTEGER NOT NULL,
+        book_title TEXT NOT NULL,
+        borrower_name TEXT NOT NULL,
+        borrower_phone TEXT NOT NULL,
+        borrower_card_id TEXT,
+        borrow_date TEXT NOT NULL,
+        due_date TEXT NOT NULL,
+        return_date TEXT,
+        status TEXT NOT NULL DEFAULT 'BORROWED',
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Seed books nếu trống
     const countRow = sqlite.prepare('SELECT COUNT(*) as count FROM books').get();
     if (!countRow || countRow.count === 0) {
       const insert = sqlite.prepare(`
@@ -166,27 +233,44 @@ try {
       sqlite.exec('COMMIT');
     }
 
+    // Seed borrows nếu trống
+    const countBorrow = sqlite.prepare('SELECT COUNT(*) as count FROM borrow_records').get();
+    if (!countBorrow || countBorrow.count === 0) {
+      const insertB = sqlite.prepare(`
+        INSERT INTO borrow_records (book_id, book_title, borrower_name, borrower_phone, borrower_card_id, borrow_date, due_date, return_date, status, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      sqlite.exec('BEGIN');
+      for (const br of initialSampleBorrows) {
+        insertB.run(br.book_id, br.book_title, br.borrower_name, br.borrower_phone, br.borrower_card_id, br.borrow_date, br.due_date, br.return_date, br.status, br.notes);
+      }
+      sqlite.exec('COMMIT');
+    }
+
     db = sqlite;
     console.log('✅ Cơ sở dữ liệu: node:sqlite (Native Node.js)');
   }
 } catch (e) {
-  // node:sqlite không có trên phiên bản Node cũ hơn (Node < 22.5)
+  // node:sqlite không có trên Node < 22.5
 }
 
-// 2. Fallback thuần JavaScript: File-based JSON database (100% không bao giờ crash, không cần C++ addon)
+// 2. Fallback JSON File Database (Universal Safe Storage)
 if (!db) {
   console.log('✅ Cơ sở dữ liệu: Pure JSON File Database (Universal Safe Storage)');
   const jsonFilePath = path.resolve(__dirname, 'library-data.json');
 
-  let memoryData = { books: [] };
+  let memoryData = { books: [], borrow_records: [] };
   if (fs.existsSync(jsonFilePath)) {
     try {
       memoryData = JSON.parse(fs.readFileSync(jsonFilePath, 'utf-8'));
+      if (!memoryData.borrow_records) {
+        memoryData.borrow_records = [...initialSampleBorrows];
+      }
     } catch (err) {
-      memoryData = { books: [...initialSampleBooks] };
+      memoryData = { books: [...initialSampleBooks], borrow_records: [...initialSampleBorrows] };
     }
   } else {
-    memoryData = { books: [...initialSampleBooks] };
+    memoryData = { books: [...initialSampleBooks], borrow_records: [...initialSampleBorrows] };
     fs.writeFileSync(jsonFilePath, JSON.stringify(memoryData, null, 2), 'utf-8');
   }
 
@@ -199,17 +283,27 @@ if (!db) {
   }
 
   db = {
-    exec(sql) {
-      // no-op for JSON store
-    },
+    exec(sql) {},
     prepare(sql) {
       return {
         get(...params) {
           const s = sql.toLowerCase();
-          if (s.includes('count(*) as count')) {
+          // Borrow records queries
+          if (s.includes('from borrow_records')) {
+            if (s.includes('where id = ?')) {
+              const id = Number(params[0]);
+              return memoryData.borrow_records.find(b => b.id === id) || null;
+            }
+            if (s.includes('count(*) as count')) {
+              return { count: memoryData.borrow_records.length };
+            }
+          }
+
+          // Books queries
+          if (s.includes('count(*) as count from books')) {
             return { count: memoryData.books.length };
           }
-          if (s.includes('where id = ?')) {
+          if (s.includes('from books where id = ?')) {
             const id = Number(params[0]);
             return memoryData.books.find(b => b.id === id) || null;
           }
@@ -233,6 +327,33 @@ if (!db) {
         },
         all(...params) {
           const s = sql.toLowerCase();
+
+          // Query borrow_records
+          if (s.includes('from borrow_records')) {
+            let records = [...memoryData.borrow_records];
+            let pIdx = 0;
+
+            if (sql.includes('borrower_name LIKE ?')) {
+              const term = String(params[pIdx] || '').replace(/%/g, '').toLowerCase();
+              pIdx += 3;
+              records = records.filter(r =>
+                r.borrower_name.toLowerCase().includes(term) ||
+                (r.borrower_phone && r.borrower_phone.toLowerCase().includes(term)) ||
+                r.book_title.toLowerCase().includes(term)
+              );
+            }
+
+            if (sql.includes('status = ?')) {
+              const st = String(params[pIdx]);
+              records = records.filter(r => r.status === st);
+            }
+
+            // Sort by id DESC
+            records.sort((a, b) => (b.id || 0) - (a.id || 0));
+            return records;
+          }
+
+          // Query categories
           if (s.includes('select distinct category')) {
             const set = new Set();
             for (const b of memoryData.books) {
@@ -240,6 +361,8 @@ if (!db) {
             }
             return Array.from(set).sort().map(category => ({ category }));
           }
+
+          // Group by category
           if (s.includes('group by category')) {
             const groups = {};
             for (const b of memoryData.books) {
@@ -250,7 +373,8 @@ if (!db) {
             }
             return Object.values(groups).sort((a, b) => b.count - a.count);
           }
-          // Query GET /api/books with filters
+
+          // Query books with filters
           let results = [...memoryData.books];
           let paramIdx = 0;
 
@@ -276,7 +400,6 @@ if (!db) {
             results = results.filter(b => b.status === st);
           }
 
-          // Sorting
           if (sql.includes('ORDER BY')) {
             const match = sql.match(/ORDER BY\s+([a-zA-Z_]+)\s+(ASC|DESC)/i);
             if (match) {
@@ -294,6 +417,53 @@ if (!db) {
         },
         run(...params) {
           const s = sql.toLowerCase();
+
+          // Insert borrow record
+          if (s.includes('insert into borrow_records')) {
+            const [book_id, book_title, borrower_name, borrower_phone, borrower_card_id, borrow_date, due_date, return_date, status, notes] = params;
+            const nextId = memoryData.borrow_records.length > 0 ? Math.max(...memoryData.borrow_records.map(b => b.id || 0)) + 1 : 1;
+            const newRecord = {
+              id: nextId,
+              book_id: Number(book_id),
+              book_title,
+              borrower_name,
+              borrower_phone,
+              borrower_card_id: borrower_card_id || '',
+              borrow_date,
+              due_date,
+              return_date: return_date || null,
+              status: status || 'BORROWED',
+              notes: notes || '',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            };
+            memoryData.borrow_records.push(newRecord);
+            persist();
+            return { changes: 1, lastInsertRowid: nextId };
+          }
+
+          // Update borrow record (Return book)
+          if (s.includes('update borrow_records')) {
+            const id = Number(params[params.length - 1]);
+            const record = memoryData.borrow_records.find(r => r.id === id);
+            if (record) {
+              record.return_date = params[0];
+              record.status = params[1];
+              record.updated_at = new Date().toISOString();
+              persist();
+              return { changes: 1 };
+            }
+          }
+
+          // Delete borrow record
+          if (s.includes('delete from borrow_records where id = ?')) {
+            const id = Number(params[0]);
+            memoryData.borrow_records = memoryData.borrow_records.filter(r => r.id !== id);
+            persist();
+            return { changes: 1 };
+          }
+
+          // Books CRUD
           if (s.includes('insert into books')) {
             const [title, author, isbn, category, published_year, quantity, available_copies, status, description, cover_url] = params;
             const nextId = memoryData.books.length > 0 ? Math.max(...memoryData.books.map(b => b.id || 0)) + 1 : 1;
@@ -316,20 +486,17 @@ if (!db) {
             persist();
             return { changes: 1, lastInsertRowid: nextId };
           }
+
           if (s.includes('update books') && s.includes('where id = ?')) {
             const id = Number(params[params.length - 1]);
             const book = memoryData.books.find(b => b.id === id);
             if (book) {
-              if (params.length === 2) {
+              if (params.length === 3) {
                 // PATCH borrow or return: available_copies, status, id
                 book.available_copies = Number(params[0]);
                 book.status = params[1];
-              } else if (params.length === 3) {
-                // PATCH borrow or return
-                book.available_copies = Number(params[0]);
-                book.status = params[1];
               } else {
-                // Full update: title, author, isbn, category, published_year, quantity, available_copies, status, description, cover_url, id
+                // Full update
                 book.title = params[0];
                 book.author = params[1];
                 book.isbn = params[2];
@@ -346,12 +513,14 @@ if (!db) {
               return { changes: 1 };
             }
           }
+
           if (s.includes('delete from books where id = ?')) {
             const id = Number(params[0]);
             memoryData.books = memoryData.books.filter(b => b.id !== id);
             persist();
             return { changes: 1 };
           }
+
           return { changes: 0 };
         }
       };
