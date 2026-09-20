@@ -1,13 +1,39 @@
-const Database = require('better-sqlite3');
 const path = require('path');
-
 const dbPath = path.resolve(__dirname, 'library.db');
-const db = new Database(dbPath);
 
-// Enable WAL mode for better concurrency and performance
-db.pragma('journal_mode = WAL');
+let db;
 
-// Initialize database schema
+// Ưu tiên dùng node:sqlite có sẵn trong Node.js (không cần biên dịch C++, không bao giờ bị Segmentation fault)
+try {
+  const { DatabaseSync } = require('node:sqlite');
+  if (DatabaseSync) {
+    db = new DatabaseSync(dbPath);
+    console.log('✅ Đang sử dụng module chuẩn node:sqlite (Built-in Node.js)');
+  }
+} catch (e) {
+  // Bỏ qua nếu phiên bản Node cũ hơn
+}
+
+// Fallback sang better-sqlite3 nếu node:sqlite không có
+if (!db) {
+  try {
+    const BetterSqlite3 = require('better-sqlite3');
+    db = new BetterSqlite3(dbPath);
+    console.log('✅ Đang sử dụng better-sqlite3');
+  } catch (e) {
+    console.error('Không thể khởi tạo SQLite database:', e);
+    throw e;
+  }
+}
+
+// Kích hoạt WAL mode
+try {
+  db.exec('PRAGMA journal_mode = WAL;');
+} catch (e) {
+  console.warn('Cảnh báo thiết lập WAL mode:', e.message);
+}
+
+// Khởi tạo bảng dữ liệu
 function initDatabase() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS books (
@@ -27,19 +53,14 @@ function initDatabase() {
     );
   `);
 
-  // Check if initial seed is needed
-  const count = db.prepare('SELECT COUNT(*) as count FROM books').get().count;
+  const row = db.prepare('SELECT COUNT(*) as count FROM books').get();
+  const count = row ? (row.count || 0) : 0;
   if (count === 0) {
     seedInitialData();
   }
 }
 
 function seedInitialData() {
-  const insert = db.prepare(`
-    INSERT INTO books (title, author, isbn, category, published_year, quantity, available_copies, status, description, cover_url)
-    VALUES (@title, @author, @isbn, @category, @published_year, @quantity, @available_copies, @status, @description, @cover_url)
-  `);
-
   const initialBooks = [
     {
       title: 'Đắc Nhân Tâm',
@@ -139,14 +160,33 @@ function seedInitialData() {
     }
   ];
 
-  const insertMany = db.transaction((books) => {
-    for (const b of books) {
-      insert.run(b);
-    }
-  });
+  const insert = db.prepare(`
+    INSERT INTO books (title, author, isbn, category, published_year, quantity, available_copies, status, description, cover_url)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
 
-  insertMany(initialBooks);
-  console.log(`Đã nạp thành công ${initialBooks.length} cuốn sách mẫu vào CSDL.`);
+  try {
+    db.exec('BEGIN');
+    for (const b of initialBooks) {
+      insert.run(
+        b.title,
+        b.author,
+        b.isbn,
+        b.category,
+        b.published_year,
+        b.quantity,
+        b.available_copies,
+        b.status,
+        b.description,
+        b.cover_url
+      );
+    }
+    db.exec('COMMIT');
+    console.log(`Đã nạp thành công ${initialBooks.length} cuốn sách mẫu vào CSDL.`);
+  } catch (err) {
+    try { db.exec('ROLLBACK'); } catch (_) {}
+    console.error('Lỗi khi nạp dữ liệu mẫu:', err);
+  }
 }
 
 initDatabase();

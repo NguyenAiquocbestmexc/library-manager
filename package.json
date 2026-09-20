@@ -13,7 +13,7 @@
   },
   "keywords": ["library", "crud", "express", "react", "sqlite"],
   "engines": {
-    "node": "20.x"
+    "node": ">=22.0.0"
   },
   "author": "",
   "license": "ISC"
