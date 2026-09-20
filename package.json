@@ -1,0 +1,16 @@
+{
+  "name": "library-manager",
+  "version": "1.0.0",
+  "description": "Library Management Web Application (Fullstack Node.js + Express + React + SQLite)",
+  "scripts": {
+    "install:all": "npm --prefix backend install && npm --prefix frontend install",
+    "build": "npm --prefix frontend run build",
+    "start": "node backend/server.js",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "test:backend": "npm --prefix backend run test"
+  },
+  "keywords": ["library", "crud", "express", "react", "sqlite"],
+  "author": "",
+  "license": "ISC"
+}
