@@ -11,6 +11,9 @@
     "test:backend": "npm --prefix backend run test"
   },
   "keywords": ["library", "crud", "express", "react", "sqlite"],
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "author": "",
   "license": "ISC"
 }
